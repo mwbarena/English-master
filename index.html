@@ -216,9 +216,9 @@
 const modules = [
   { key:'scan', label:'Scan & Solve', badge:'live',
     icon:`<path d="M4 8a2 2 0 012-2h1.5l1-1.5h7l1 1.5H18a2 2 0 012 2v9a2 2 0 01-2 2H6a2 2 0 01-2-2V8z"/><circle cx="12" cy="13" r="3.2"/>` },
-  { key:'dictionary', label:'Dictionary', badge:'next',
+  { key:'dictionary', label:'Dictionary', badge:'live',
     icon:`<path d="M4 19.5A2.5 2.5 0 016.5 17H20V4H6.5A2.5 2.5 0 004 6.5v13z"/><path d="M4 19.5V6.5"/>` },
-  { key:'grammar', label:'Grammar Ref.', badge:'next',
+  { key:'grammar', label:'Grammar Ref.', badge:'live',
     icon:`<path d="M4 6h16M4 12h10M4 18h16"/>` },
   { key:'essay', label:'Essay & Letter', badge:'soon',
     icon:`<path d="M12 20h9M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/>` },
@@ -434,10 +434,8 @@ function scanSolveHTML(){
 }
 
 const subMenus = {
-  dictionary: { title:'Dictionary', badge:'next', desc:'Choose a lookup direction.', chips:['English → Urdu','Urdu → English','English → English'] },
-  grammar:    { title:'Grammar Reference', badge:'next', desc:'Choose a topic to study.', chips:['Tenses','Idioms','Word Pairs','Prepositions'] },
-  essay:      { title:'Essay & Letter Writer', badge:'soon', desc:'Choose what you want to write.', chips:['Essay','Letter','Application','Story','Poem'] },
-  sentence:   { title:'Sentence Builder', badge:'soon', desc:'Choose an exercise type.', chips:['Sentence Making','Narration → Paragraph','Singular / Plural'] },
+  essay:    { title:'Essay & Letter Writer', badge:'soon', desc:'Choose what you want to write.', chips:['Essay','Letter','Application','Story','Poem'] },
+  sentence: { title:'Sentence Builder', badge:'soon', desc:'Choose an exercise type.', chips:['Sentence Making','Narration → Paragraph','Singular / Plural'] },
 };
 
 function placeholderHTML(key){
@@ -456,10 +454,250 @@ function placeholderHTML(key){
   `;
 }
 
+// ============ Dictionary (real, free, no AI) ============
+let urduDict = null; // cached array of {word, pos, defs, ipa, forms}
+let urduDictLoading = null;
+
+function loadUrduDict(){
+  if(urduDict) return Promise.resolve(urduDict);
+  if(urduDictLoading) return urduDictLoading;
+  urduDictLoading = fetch('https://gitlab.com/tdulcet/compact-dictionary/-/raw/main/wiktionary/dictionary-ur.json?inline=false')
+    .then(r => { if(!r.ok) throw new Error('HTTP ' + r.status); return r.text(); })
+    .then(text => {
+      const lines = text.split('\n').filter(Boolean);
+      urduDict = lines.map(line => {
+        try { return JSON.parse(line); } catch(e){ return null; }
+      }).filter(Boolean);
+      return urduDict;
+    });
+  return urduDictLoading;
+}
+
+function dictionaryHTML(){
+  return `
+    <div class="panel">
+      <div class="panel-title">Dictionary <span class="badge">live</span></div>
+      <div class="panel-sub">Free lookups — no AI, no limits.</div>
+      <div class="chip-row">
+        <div class="chip active" data-mode="enen">English → English</div>
+        <div class="chip" data-mode="uren">Urdu → English</div>
+        <div class="chip" data-mode="enur">English → Urdu</div>
+      </div>
+      <div class="capture-row" style="margin-bottom:10px;">
+        <input id="dict-input" type="text" placeholder="Type a word..." style="flex:1;padding:12px;border-radius:8px;border:1.5px solid var(--line);font-size:14px;">
+      </div>
+      <button class="solve-btn" id="dict-search-btn">Look Up</button>
+      <div id="dict-status" style="font-family:'JetBrains Mono',monospace;font-size:11.5px;color:var(--muted);margin-top:10px;"></div>
+      <div id="dict-results" style="margin-top:14px;"></div>
+    </div>
+  `;
+}
+
+function wireDictionary(){
+  const chips = host.querySelectorAll('.chip[data-mode]');
+  const input = document.getElementById('dict-input');
+  const btn = document.getElementById('dict-search-btn');
+  const statusEl = document.getElementById('dict-status');
+  const results = document.getElementById('dict-results');
+  let mode = 'enen';
+
+  chips.forEach(c => c.addEventListener('click', () => {
+    chips.forEach(x => x.classList.remove('active'));
+    c.classList.add('active');
+    mode = c.dataset.mode;
+    input.placeholder = mode === 'enen' ? 'Type an English word...' : mode === 'uren' ? 'Type an Urdu word...' : 'Type an English word to find in Urdu...';
+    results.innerHTML = '';
+    statusEl.textContent = '';
+  }));
+
+  function renderEntryCard(title, pos, defs){
+    return `<div style="border:1.5px solid var(--line);border-radius:10px;padding:12px;margin-bottom:10px;background:#fafbfc;">
+      <div style="font-weight:700;font-size:15px;color:var(--ink);">${title}${pos?` <span style="font-weight:500;font-size:11px;color:var(--green-dark);font-style:italic;">${pos}</span>`:''}</div>
+      <ol style="margin:8px 0 0 18px;padding:0;font-size:13px;color:var(--ink);line-height:1.6;">
+        ${defs.map(d => `<li>${d}</li>`).join('')}
+      </ol>
+    </div>`;
+  }
+
+  async function search(){
+    const q = input.value.trim();
+    if(!q) return;
+    results.innerHTML = '';
+    btn.disabled = true;
+    statusEl.innerHTML = '<span class="spinner"></span>Looking up...';
+
+    try {
+      if(mode === 'enen'){
+        const res = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(q)}`);
+        if(!res.ok) throw new Error('No definition found for "' + q + '".');
+        const data = await res.json();
+        let html = '';
+        data.forEach(entry => {
+          const phon = entry.phonetic || (entry.phonetics && entry.phonetics.find(p=>p.text)?.text) || '';
+          (entry.meanings || []).forEach(m => {
+            const defs = (m.definitions || []).slice(0,4).map(d => d.definition + (d.example ? ` <em>(e.g. "${d.example}")</em>` : ''));
+            html += renderEntryCard(entry.word + (phon?` <span style="font-weight:400;color:var(--muted);">${phon}</span>`:''), m.partOfSpeech, defs);
+          });
+        });
+        results.innerHTML = html;
+        statusEl.textContent = 'Done.';
+      } else {
+        await loadUrduDict();
+        const ql = q.toLowerCase();
+        let matches = [];
+        if(mode === 'uren'){
+          matches = urduDict.filter(e => e[''] === q).slice(0,5);
+          if(matches.length === 0) matches = urduDict.filter(e => e[''] && e[''].includes(q)).slice(0,5);
+        } else {
+          matches = urduDict.filter(e => (e.d||[]).some(def => def.toLowerCase().includes(ql))).slice(0,6);
+        }
+        if(matches.length === 0){
+          results.innerHTML = `<div class="placeholder-body">No matches found for "${q}".</div>`;
+        } else {
+          results.innerHTML = matches.map(e => renderEntryCard(e[''], (e.p||[]).join(', '), (e.d||[]).slice(0,3))).join('');
+        }
+        statusEl.textContent = 'Done. (Source: Wiktionary via compact-dictionaries)';
+      }
+    } catch(err){
+      statusEl.textContent = 'Error: ' + err.message;
+      console.error(err);
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  btn.addEventListener('click', search);
+  input.addEventListener('keydown', e => { if(e.key === 'Enter') search(); });
+}
+
+// ============ Grammar Checker (real, free, no AI — LanguageTool) ============
+const tensesRef = [
+  { name:'Present Simple', formula:'Subject + base verb (+s/es for he/she/it)', example:'She writes a letter.' },
+  { name:'Present Continuous', formula:'Subject + am/is/are + verb-ing', example:'She is writing a letter.' },
+  { name:'Present Perfect', formula:'Subject + have/has + past participle', example:'She has written a letter.' },
+  { name:'Past Simple', formula:'Subject + past form of verb', example:'She wrote a letter.' },
+  { name:'Past Continuous', formula:'Subject + was/were + verb-ing', example:'She was writing a letter.' },
+  { name:'Past Perfect', formula:'Subject + had + past participle', example:'She had written a letter.' },
+  { name:'Future Simple', formula:'Subject + will + base verb', example:'She will write a letter.' },
+  { name:'Future Continuous', formula:'Subject + will be + verb-ing', example:'She will be writing a letter.' },
+  { name:'Future Perfect', formula:'Subject + will have + past participle', example:'She will have written a letter.' },
+];
+
+const idiomsRef = [
+  { idiom:'Break the ice', meaning:'To initiate conversation in a social setting.' },
+  { idiom:'Once in a blue moon', meaning:'Something that happens very rarely.' },
+  { idiom:'Hit the books', meaning:'To study hard.' },
+  { idiom:'Under the weather', meaning:'Feeling slightly unwell.' },
+  { idiom:'Piece of cake', meaning:'Something very easy to do.' },
+  { idiom:'Let the cat out of the bag', meaning:'To reveal a secret by mistake.' },
+  { idiom:'Cost an arm and a leg', meaning:'To be very expensive.' },
+  { idiom:'Burn the midnight oil', meaning:'To work or study late into the night.' },
+];
+
+function grammarHTML(){
+  return `
+    <div class="panel">
+      <div class="panel-title">Grammar Checker <span class="badge">live</span></div>
+      <div class="panel-sub">Paste or write a sentence — get real grammar/spelling corrections.</div>
+      <textarea id="grammar-input" rows="4" placeholder="Type or paste a sentence to check..." style="width:100%;padding:12px;border-radius:8px;border:1.5px solid var(--line);font-size:14px;font-family:'Inter',sans-serif;margin-bottom:12px;resize:vertical;"></textarea>
+      <button class="solve-btn" id="grammar-check-btn">Check Grammar</button>
+      <div id="grammar-status" style="font-family:'JetBrains Mono',monospace;font-size:11.5px;color:var(--muted);margin-top:10px;"></div>
+      <div id="grammar-results" style="margin-top:12px;"></div>
+    </div>
+    <div class="panel">
+      <div class="panel-title">Reference</div>
+      <div class="panel-sub">Browse tenses and idioms.</div>
+      <div class="chip-row">
+        <div class="chip active" data-ref="tenses">Tenses</div>
+        <div class="chip" data-ref="idioms">Idioms</div>
+      </div>
+      <div id="ref-body"></div>
+    </div>
+  `;
+}
+
+function wireGrammar(){
+  const input = document.getElementById('grammar-input');
+  const btn = document.getElementById('grammar-check-btn');
+  const statusEl = document.getElementById('grammar-status');
+  const results = document.getElementById('grammar-results');
+
+  btn.addEventListener('click', async () => {
+    const text = input.value.trim();
+    if(!text) return;
+    btn.disabled = true;
+    results.innerHTML = '';
+    statusEl.innerHTML = '<span class="spinner"></span>Checking...';
+
+    try {
+      const res = await fetch('https://api.languagetool.org/v2/check', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ text, language: 'en-US' }),
+      });
+      if(!res.ok) throw new Error('HTTP ' + res.status);
+      const data = await res.json();
+      const matches = data.matches || [];
+
+      if(matches.length === 0){
+        results.innerHTML = `<div class="placeholder-body">No issues found — looks good!</div>`;
+      } else {
+        results.innerHTML = matches.map(m => {
+          const suggestion = (m.replacements||[]).slice(0,3).map(r=>r.value).join(', ');
+          return `<div style="border:1.5px solid var(--line);border-radius:10px;padding:12px;margin-bottom:10px;background:#fafbfc;">
+            <div style="font-size:13.5px;color:var(--ink);">${m.message}</div>
+            ${suggestion ? `<div style="margin-top:6px;font-size:12.5px;"><span style="color:var(--green-dark);font-weight:600;">Suggested:</span> ${suggestion}</div>` : ''}
+          </div>`;
+        }).join('');
+      }
+      statusEl.textContent = `Done. ${matches.length} issue(s) found. (Source: LanguageTool)`;
+    } catch(err){
+      statusEl.textContent = 'Error: ' + err.message;
+      console.error(err);
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  const refChips = host.querySelectorAll('.chip[data-ref]');
+  const refBody = document.getElementById('ref-body');
+
+  function renderRef(type){
+    if(type === 'tenses'){
+      refBody.innerHTML = tensesRef.map(t => `
+        <div style="border:1.5px solid var(--line);border-radius:10px;padding:12px;margin-top:10px;background:#fafbfc;">
+          <div style="font-weight:700;font-size:14px;color:var(--ink);">${t.name}</div>
+          <div style="font-size:12.5px;color:var(--green-dark);margin-top:4px;">${t.formula}</div>
+          <div style="font-size:13px;color:var(--muted);margin-top:4px;font-style:italic;">${t.example}</div>
+        </div>
+      `).join('');
+    } else {
+      refBody.innerHTML = idiomsRef.map(i => `
+        <div style="border:1.5px solid var(--line);border-radius:10px;padding:12px;margin-top:10px;background:#fafbfc;">
+          <div style="font-weight:700;font-size:14px;color:var(--ink);">${i.idiom}</div>
+          <div style="font-size:13px;color:var(--muted);margin-top:4px;">${i.meaning}</div>
+        </div>
+      `).join('');
+    }
+  }
+  refChips.forEach(c => c.addEventListener('click', () => {
+    refChips.forEach(x => x.classList.remove('active'));
+    c.classList.add('active');
+    renderRef(c.dataset.ref);
+  }));
+  renderRef('tenses');
+}
+
 function renderPanel(key){
   if(key === 'scan'){
     host.innerHTML = scanSolveHTML();
     wireScanSolve();
+  } else if(key === 'dictionary'){
+    host.innerHTML = dictionaryHTML();
+    wireDictionary();
+  } else if(key === 'grammar'){
+    host.innerHTML = grammarHTML();
+    wireGrammar();
   } else {
     host.innerHTML = placeholderHTML(key);
     const chips = host.querySelectorAll('.chip');
@@ -553,7 +791,8 @@ function wireScanSolve(){
 
       if(!response.ok){
         const errBody = await response.json().catch(() => ({}));
-        throw new Error(errBody.error || ('Answer service error (' + response.status + '). Please try again in a moment.'));
+        const msg = errBody.detail ? `${errBody.error} (${errBody.detail})` : (errBody.error || ('Answer service error (' + response.status + ').'));
+        throw new Error(msg);
       }
 
       const result = await response.json();
