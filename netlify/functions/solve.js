@@ -62,12 +62,13 @@ ANSWER:
         ],
       },
     ],
+    generationConfig: { maxOutputTokens: 900 },
   };
 
   let lastError = 'Unknown error';
-  const models = ['gemini-3.5-flash', 'gemini-3.1-flash-lite'];
+  const model = 'gemini-3.1-flash-lite'; // fastest model, single attempt per key to avoid stacking latency past the function timeout
 
-  async function tryKey(key, model){
+  async function tryKey(key){
     const base = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
     return fetch(base, {
       method: 'POST',
@@ -79,22 +80,22 @@ ANSWER:
   for (let i = 0; i < keys.length; i++) {
     const key = keys[i];
 
-    for (const model of models) {
+    {
       try {
-        const res = await tryKey(key, model);
+        const res = await tryKey(key);
 
         if (res.status === 429) {
           lastError = `Key ${i + 1} rate-limited on ${model} (HTTP 429). Trying next key...`;
-          break; // quota is quota, move to next key
+          continue; // fails fast, safe to try next key
         }
 
         if (res.status === 401 || res.status === 403) {
           lastError = `Key ${i + 1} rejected on ${model} (HTTP ${res.status}).`;
-          continue; // try next model with same key
+          continue; // try next key
         }
 
         if (res.status === 503) {
-          lastError = `Key ${i + 1}: ${model} overloaded (HTTP 503). Trying next model...`;
+          lastError = `Key ${i + 1}: ${model} overloaded (HTTP 503). Trying next key...`;
           continue;
         }
 

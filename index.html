@@ -224,6 +224,10 @@ const modules = [
     icon:`<path d="M12 20h9M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/>` },
   { key:'sentence', label:'Sentence Builder', badge:'live',
     icon:`<path d="M3 12h18M3 6h12M3 18h8"/>` },
+  { key:'ask', label:'Ask Anything', badge:'live',
+    icon:`<path d="M12 18h.01M9.09 9a3 3 0 015.83 1c0 2-3 2-3 4"/><circle cx="12" cy="12" r="9"/>` },
+  { key:'voice', label:'Voice Assistant', badge:'live',
+    icon:`<path d="M12 15a3 3 0 003-3V6a3 3 0 00-6 0v6a3 3 0 003 3z"/><path d="M19 11a7 7 0 01-14 0M12 18v3"/>` },
 ];
 
 const N = modules.length;
@@ -783,7 +787,10 @@ function grammarHTML(){
       <div class="panel-title">Grammar Checker <span class="badge">live</span></div>
       <div class="panel-sub">Paste or write a sentence — get real grammar/spelling corrections.</div>
       <textarea id="grammar-input" rows="4" placeholder="Type or paste a sentence to check..." style="width:100%;padding:12px;border-radius:8px;border:1.5px solid var(--line);font-size:14px;font-family:'Inter',sans-serif;margin-bottom:12px;resize:vertical;"></textarea>
-      <button class="solve-btn" id="grammar-check-btn">Check Grammar</button>
+      <div class="capture-row">
+        <button class="solve-btn" id="grammar-check-btn" style="flex:1;">Check Grammar</button>
+        <button class="solve-btn" id="grammar-deep-btn" style="flex:1;background:linear-gradient(135deg,#8a6d38,#5c481f);">Deep Check (AI)</button>
+      </div>
       <div id="grammar-status" style="font-family:'JetBrains Mono',monospace;font-size:11.5px;color:var(--muted);margin-top:10px;"></div>
       <div id="grammar-results" style="margin-top:12px;"></div>
     </div>
@@ -805,8 +812,38 @@ function grammarHTML(){
 function wireGrammar(){
   const input = document.getElementById('grammar-input');
   const btn = document.getElementById('grammar-check-btn');
+  const deepBtn = document.getElementById('grammar-deep-btn');
   const statusEl = document.getElementById('grammar-status');
   const results = document.getElementById('grammar-results');
+
+  deepBtn.addEventListener('click', async () => {
+    const text = input.value.trim();
+    if(!text) return;
+    deepBtn.disabled = true;
+    results.innerHTML = '';
+    statusEl.innerHTML = '<span class="spinner"></span>Deep checking with AI...';
+
+    try {
+      const res = await fetch('/api/write', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ task: 'grammarDeep', input: text, grade: 'Class 6-8 (middle school)' }),
+      });
+      if(!res.ok){
+        const errBody = await res.json().catch(() => ({}));
+        throw new Error(errBody.error || ('Service error (HTTP ' + res.status + ')'));
+      }
+      const data = await res.json();
+      results.innerHTML = `<div style="border:1.5px solid var(--line);border-radius:10px;padding:12px;background:#fafbfc;font-size:13.5px;line-height:1.6;color:var(--ink);white-space:pre-wrap;">${data.text || ''}</div>`;
+      statusEl.textContent = 'Done. (Source: Gemini AI — catches meaning-level issues too)';
+    } catch(err){
+      statusEl.className = 'err';
+      statusEl.textContent = 'Error: ' + err.message;
+      console.error(err);
+    } finally {
+      deepBtn.disabled = false;
+    }
+  });
 
   btn.addEventListener('click', async () => {
     const text = input.value.trim();
@@ -898,6 +935,195 @@ function wireGrammar(){
   renderRef('tenses');
 }
 
+// ============ Ask Anything (Gemini-backed general Q&A) ============
+function askHTML(){
+  return `
+    <div class="panel">
+      <div class="panel-title">Ask Anything <span class="badge">live</span></div>
+      <div class="panel-sub">Any English question — grammar, general knowledge, textbook, or MCQ.</div>
+      <textarea id="ask-input" rows="3" placeholder="Type your question here..." style="width:100%;padding:12px;border-radius:8px;border:1.5px solid var(--line);font-size:14px;font-family:'Inter',sans-serif;margin-bottom:14px;resize:vertical;"></textarea>
+      <button class="solve-btn" id="ask-btn">Ask</button>
+      <div id="ask-status" style="font-family:'JetBrains Mono',monospace;font-size:11.5px;color:var(--muted);margin-top:10px;"></div>
+      <div id="ask-output" style="margin-top:14px;font-size:14.5px;line-height:1.7;color:var(--ink);white-space:pre-wrap;"></div>
+    </div>
+  `;
+}
+
+function wireAsk(){
+  const input = document.getElementById('ask-input');
+  const btn = document.getElementById('ask-btn');
+  const statusEl = document.getElementById('ask-status');
+  const output = document.getElementById('ask-output');
+
+  btn.addEventListener('click', async () => {
+    const q = input.value.trim();
+    if(!q) return;
+    btn.disabled = true;
+    output.textContent = '';
+    statusEl.innerHTML = '<span class="spinner"></span>Thinking...';
+
+    try {
+      const res = await fetch('/api/write', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ task: 'general', input: q, grade: 'Class 6-8 (middle school)' }),
+      });
+      if(!res.ok){
+        const errBody = await res.json().catch(() => ({}));
+        throw new Error(errBody.error || ('Service error (HTTP ' + res.status + ')'));
+      }
+      const data = await res.json();
+      output.textContent = data.text || '';
+      statusEl.textContent = 'Done.';
+    } catch(err){
+      statusEl.className = 'err';
+      statusEl.textContent = 'Error: ' + err.message;
+      console.error(err);
+    } finally {
+      btn.disabled = false;
+    }
+  });
+}
+
+// ============ Voice Assistant (Web Speech API + Gemini) ============
+function voiceHTML(){
+  return `
+    <div class="panel">
+      <div class="panel-title">Voice Assistant <span class="badge">live</span></div>
+      <div class="panel-sub">Tap the orb, ask your question out loud, and it answers back.</div>
+
+      <div id="voice-orb-wrap" style="display:flex;flex-direction:column;align-items:center;padding:20px 0;">
+        <div id="voice-orb" style="position:relative;width:120px;height:120px;cursor:pointer;">
+          <div id="voice-ring1" style="position:absolute;inset:0;border-radius:50%;border:2px solid var(--green);opacity:0.35;"></div>
+          <div id="voice-ring2" style="position:absolute;inset:14px;border-radius:50%;border:2px solid var(--green);opacity:0.55;"></div>
+          <div id="voice-core" style="position:absolute;inset:28px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#2fe883,#0f6d3a);box-shadow:0 0 24px var(--green-glow);display:flex;align-items:center;justify-content:center;">
+            <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="#06140c" stroke-width="2"><path d="M12 15a3 3 0 003-3V6a3 3 0 00-6 0v6a3 3 0 003 3z"/><path d="M19 11a7 7 0 01-14 0M12 18v3"/></svg>
+          </div>
+        </div>
+        <div id="voice-hint" style="margin-top:14px;font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--muted);text-align:center;">Tap to speak</div>
+      </div>
+
+      <div id="voice-transcript" style="display:none;margin-top:6px;padding:12px;background:#fafbfc;border:1.5px solid var(--line);border-radius:8px;">
+        <div style="font-size:10px;letter-spacing:1.5px;color:var(--green-dark);text-transform:uppercase;margin-bottom:6px;">You said</div>
+        <div id="voice-transcript-text" style="font-size:13.5px;color:var(--ink);"></div>
+      </div>
+
+      <div id="voice-answer" style="display:none;margin-top:14px;">
+        <div style="font-size:10px;letter-spacing:1.5px;color:var(--green-dark);text-transform:uppercase;margin-bottom:8px;">Answer</div>
+        <div id="voice-answer-text" style="font-size:14.5px;line-height:1.7;color:var(--ink);white-space:pre-wrap;"></div>
+      </div>
+
+      <div id="voice-unsupported" style="display:none;" class="placeholder-body">
+        Voice input isn't supported in this browser. Try Chrome on Android.
+      </div>
+    </div>
+  `;
+}
+
+function wireVoice(){
+  const orb = document.getElementById('voice-orb');
+  const ring1 = document.getElementById('voice-ring1');
+  const ring2 = document.getElementById('voice-ring2');
+  const hint = document.getElementById('voice-hint');
+  const transcriptWrap = document.getElementById('voice-transcript');
+  const transcriptText = document.getElementById('voice-transcript-text');
+  const answerWrap = document.getElementById('voice-answer');
+  const answerText = document.getElementById('voice-answer-text');
+  const unsupported = document.getElementById('voice-unsupported');
+
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if(!SpeechRecognition){
+    unsupported.style.display = 'block';
+    orb.style.opacity = '0.4';
+    orb.style.pointerEvents = 'none';
+    return;
+  }
+
+  function pickFemaleVoice(){
+    const voices = window.speechSynthesis ? window.speechSynthesis.getVoices() : [];
+    const en = voices.filter(v => v.lang && v.lang.startsWith('en'));
+    const female = en.find(v => /female|zira|samantha|victoria|susan|google us english/i.test(v.name));
+    return female || en[0] || voices[0] || null;
+  }
+
+  function speak(text){
+    if(!window.speechSynthesis) return;
+    window.speechSynthesis.cancel();
+    const utter = new SpeechSynthesisUtterance(text);
+    const v = pickFemaleVoice();
+    if(v) utter.voice = v;
+    utter.pitch = 1.15;
+    utter.rate = 1.0;
+    window.speechSynthesis.speak(utter);
+  }
+
+  function setListeningVisual(active){
+    if(active){
+      ring1.style.animation = 'hubPulse 0.9s ease-in-out infinite';
+      ring2.style.animation = 'hubPulse 0.9s ease-in-out infinite 0.15s';
+      hint.textContent = 'Listening...';
+    } else {
+      ring1.style.animation = '';
+      ring2.style.animation = '';
+    }
+  }
+
+  async function askGemini(question){
+    hint.textContent = 'Thinking...';
+    answerWrap.style.display = 'none';
+    try {
+      const res = await fetch('/api/write', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ task: 'general', input: question, grade: 'Class 6-8 (middle school)' }),
+      });
+      if(!res.ok){
+        const errBody = await res.json().catch(() => ({}));
+        throw new Error(errBody.error || ('Service error (HTTP ' + res.status + ')'));
+      }
+      const data = await res.json();
+      const answer = data.text || 'Sorry, I could not find an answer.';
+      answerText.textContent = answer;
+      answerWrap.style.display = 'block';
+      hint.textContent = 'Tap to speak';
+      speak(answer);
+    } catch(err){
+      answerText.textContent = 'Error: ' + err.message;
+      answerWrap.style.display = 'block';
+      hint.textContent = 'Tap to speak';
+      console.error(err);
+    }
+  }
+
+  let recognition = null;
+  let listening = false;
+
+  function startListening(){
+    if(listening) return;
+    recognition = new SpeechRecognition();
+    recognition.lang = 'en-US';
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+
+    recognition.onstart = () => { listening = true; setListeningVisual(true); };
+    recognition.onend = () => { listening = false; setListeningVisual(false); };
+    recognition.onerror = () => { listening = false; setListeningVisual(false); hint.textContent = 'Tap to speak'; };
+
+    recognition.onresult = (event) => {
+      const said = event.results[0][0].transcript;
+      transcriptText.textContent = said;
+      transcriptWrap.style.display = 'block';
+      askGemini(said);
+    };
+
+    recognition.start();
+  }
+
+  orb.addEventListener('click', () => {
+    if(listening){ recognition && recognition.stop(); return; }
+    startListening();
+  });
+}
 function renderPanel(key){
   if(key === 'scan'){
     host.innerHTML = scanSolveHTML();
@@ -914,6 +1140,12 @@ function renderPanel(key){
   } else if(key === 'sentence'){
     host.innerHTML = sentenceHTML();
     wireSentence();
+  } else if(key === 'ask'){
+    host.innerHTML = askHTML();
+    wireAsk();
+  } else if(key === 'voice'){
+    host.innerHTML = voiceHTML();
+    wireVoice();
   }
 }
 
