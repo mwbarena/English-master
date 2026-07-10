@@ -581,16 +581,56 @@ const tensesRef = [
   { name:'Future Perfect', formula:'Subject + will have + past participle', example:'She will have written a letter.' },
 ];
 
-const idiomsRef = [
+const idiomsRefFallback = [
   { idiom:'Break the ice', meaning:'To initiate conversation in a social setting.' },
   { idiom:'Once in a blue moon', meaning:'Something that happens very rarely.' },
   { idiom:'Hit the books', meaning:'To study hard.' },
   { idiom:'Under the weather', meaning:'Feeling slightly unwell.' },
   { idiom:'Piece of cake', meaning:'Something very easy to do.' },
-  { idiom:'Let the cat out of the bag', meaning:'To reveal a secret by mistake.' },
-  { idiom:'Cost an arm and a leg', meaning:'To be very expensive.' },
-  { idiom:'Burn the midnight oil', meaning:'To work or study late into the night.' },
 ];
+let idiomsRef = null;
+let idiomsLoading = null;
+
+function parseCSVLine(line){
+  const out = [];
+  let cur = '';
+  let inQuotes = false;
+  for(let i=0;i<line.length;i++){
+    const ch = line[i];
+    if(inQuotes){
+      if(ch === '"'){
+        if(line[i+1] === '"'){ cur += '"'; i++; }
+        else inQuotes = false;
+      } else cur += ch;
+    } else {
+      if(ch === '"') inQuotes = true;
+      else if(ch === ','){ out.push(cur); cur = ''; }
+      else cur += ch;
+    }
+  }
+  out.push(cur);
+  return out;
+}
+
+function loadIdioms(){
+  if(idiomsRef) return Promise.resolve(idiomsRef);
+  if(idiomsLoading) return idiomsLoading;
+  idiomsLoading = fetch('https://raw.githubusercontent.com/baiango/english_idioms/main/idioms.csv')
+    .then(r => { if(!r.ok) throw new Error('HTTP ' + r.status); return r.text(); })
+    .then(text => {
+      const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+      const rows = lines.slice(1).map(parseCSVLine); // skip header row
+      idiomsRef = rows
+        .filter(r => r[0])
+        .map(r => ({ idiom: r[0], meaning: r[1] || '' }));
+      return idiomsRef;
+    })
+    .catch(err => {
+      idiomsRef = idiomsRefFallback;
+      return idiomsRef;
+    });
+  return idiomsLoading;
+}
 
 function grammarHTML(){
   return `
@@ -604,10 +644,13 @@ function grammarHTML(){
     </div>
     <div class="panel">
       <div class="panel-title">Reference</div>
-      <div class="panel-sub">Browse tenses and idioms.</div>
+      <div class="panel-sub">Browse tenses, or search 500+ idioms.</div>
       <div class="chip-row">
         <div class="chip active" data-ref="tenses">Tenses</div>
         <div class="chip" data-ref="idioms">Idioms</div>
+      </div>
+      <div id="idiom-search-wrap" style="display:none;margin-bottom:12px;">
+        <input id="idiom-search" type="text" placeholder="Search idioms..." style="width:100%;padding:12px;border-radius:8px;border:1.5px solid var(--line);font-size:14px;">
       </div>
       <div id="ref-body"></div>
     </div>
@@ -659,9 +702,25 @@ function wireGrammar(){
 
   const refChips = host.querySelectorAll('.chip[data-ref]');
   const refBody = document.getElementById('ref-body');
+  const idiomSearchWrap = document.getElementById('idiom-search-wrap');
+  const idiomSearch = document.getElementById('idiom-search');
 
-  function renderRef(type){
+  function renderIdiomList(list){
+    if(list.length === 0){
+      refBody.innerHTML = `<div class="placeholder-body">No matching idioms found.</div>`;
+      return;
+    }
+    refBody.innerHTML = list.slice(0,40).map(i => `
+      <div style="border:1.5px solid var(--line);border-radius:10px;padding:12px;margin-top:10px;background:#fafbfc;">
+        <div style="font-weight:700;font-size:14px;color:var(--ink);">${i.idiom}</div>
+        <div style="font-size:13px;color:var(--muted);margin-top:4px;">${i.meaning}</div>
+      </div>
+    `).join('') + (list.length > 40 ? `<div style="text-align:center;font-size:12px;color:var(--muted);margin-top:10px;">Showing 40 of ${list.length} — narrow your search for more.</div>` : '');
+  }
+
+  async function renderRef(type){
     if(type === 'tenses'){
+      idiomSearchWrap.style.display = 'none';
       refBody.innerHTML = tensesRef.map(t => `
         <div style="border:1.5px solid var(--line);border-radius:10px;padding:12px;margin-top:10px;background:#fafbfc;">
           <div style="font-weight:700;font-size:14px;color:var(--ink);">${t.name}</div>
@@ -670,14 +729,22 @@ function wireGrammar(){
         </div>
       `).join('');
     } else {
-      refBody.innerHTML = idiomsRef.map(i => `
-        <div style="border:1.5px solid var(--line);border-radius:10px;padding:12px;margin-top:10px;background:#fafbfc;">
-          <div style="font-weight:700;font-size:14px;color:var(--ink);">${i.idiom}</div>
-          <div style="font-size:13px;color:var(--muted);margin-top:4px;">${i.meaning}</div>
-        </div>
-      `).join('');
+      idiomSearchWrap.style.display = 'block';
+      refBody.innerHTML = `<div class="placeholder-body"><span class="spinner"></span>Loading 500+ idioms...</div>`;
+      const list = await loadIdioms();
+      renderIdiomList(list);
     }
   }
+
+  idiomSearch.addEventListener('input', () => {
+    if(!idiomsRef) return;
+    const q = idiomSearch.value.trim().toLowerCase();
+    const filtered = q
+      ? idiomsRef.filter(i => i.idiom.toLowerCase().includes(q) || i.meaning.toLowerCase().includes(q))
+      : idiomsRef;
+    renderIdiomList(filtered);
+  });
+
   refChips.forEach(c => c.addEventListener('click', () => {
     refChips.forEach(x => x.classList.remove('active'));
     c.classList.add('active');
