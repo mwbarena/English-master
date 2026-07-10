@@ -1,0 +1,692 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EnglishMaster</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,600;0,700;1,600&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#eef1f3;
+    --card:#ffffff;
+    --ink:#1b2430;
+    --muted:#7c8894;
+    --line:#e1e6ea;
+    --green:#26d16f;
+    --green-dark:#149a4f;
+    --green-glow:rgba(38,209,111,0.5);
+    --hub-dark:#122024;
+    --tube-gray:#c7ccd1;
+    --tube-shadow:#a9afb5;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{
+    background:radial-gradient(ellipse at 30% 0%, #ffffff 0%, var(--bg) 60%);
+    color:var(--ink);font-family:'Inter',sans-serif;overflow-x:hidden;min-height:100vh;
+    position:relative;
+  }
+  body::before,body::after{
+    content:'';position:fixed;inset:0;z-index:-1;pointer-events:none;
+    background:radial-gradient(circle at 1px 1px, currentColor 1px, transparent 0) 0 0/16px 16px;
+  }
+  body::before{color:rgba(180,186,192,0.6);}
+  body::after{color:rgba(38,209,111,0.85);animation:dotBlink 2.6s ease-in-out infinite;}
+  @keyframes dotBlink{0%,100%{opacity:0;}50%{opacity:1;}}
+
+  header{position:relative;text-align:center;padding:26px 20px 10px;overflow:hidden;}
+  #matrix-canvas{position:absolute;inset:0;width:100%;height:100%;opacity:0.6;pointer-events:none;}
+  .header-inner{position:relative;z-index:2;}
+  .eyebrow{font-family:'JetBrains Mono',monospace;font-size:10.5px;letter-spacing:3px;text-transform:uppercase;color:var(--green-dark);opacity:0.9;margin-bottom:8px;}
+  h1{font-family:'JetBrains Mono',monospace;font-size:clamp(24px,7vw,32px);font-weight:700;color:var(--ink);min-height:1.2em;}
+  h1 .cursor{color:var(--green);animation:blink 1s step-end infinite;}
+  @keyframes blink{50%{opacity:0;}}
+  .sub{margin-top:8px;font-size:12.5px;color:var(--muted);max-width:420px;margin-left:auto;margin-right:auto;line-height:1.5;}
+
+  #connector-pipe{display:block;width:100%;max-width:120px;height:34px;margin:0 auto;}
+
+  #wheel-wrap{position:relative;width:100%;max-width:460px;margin:6px auto 0;height:320px;overflow:hidden;touch-action:pan-y;}
+  #tube-svg{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;}
+  .tube-base{fill:none;stroke:#b7bdc3;stroke-width:10;stroke-linecap:round;}
+  .tube-shadow{fill:none;stroke:#8b9298;stroke-width:12;stroke-linecap:round;opacity:0.5;}
+  .tube-highlight{fill:none;stroke:#f3f5f6;stroke-width:3;stroke-linecap:round;opacity:0.85;}
+  .tube-flow{fill:none;stroke:#0f8a45;stroke-width:5.5;stroke-linecap:round;opacity:0.9;}
+  .tube-flow-core{fill:none;stroke:var(--green);stroke-width:3;stroke-linecap:round;
+    filter:drop-shadow(0 0 6px var(--green-glow));animation:lavaGlow 1.8s ease-in-out infinite;}
+  @keyframes lavaGlow{
+    0%,100%{stroke:#26d16f;filter:drop-shadow(0 0 5px rgba(38,209,111,0.45));}
+    50%{stroke:#a8fac9;filter:drop-shadow(0 0 12px rgba(38,209,111,0.9));}
+  }
+  .blob{filter:drop-shadow(0 0 5px rgba(255,255,255,0.9)) drop-shadow(0 0 9px var(--green-glow));}
+
+  .hub-core{position:absolute;width:70px;height:70px;transform:translate(-50%,-50%);z-index:5;}
+  .hub-core .ring{position:absolute;inset:0;border-radius:50%;border:3px solid var(--green);
+    box-shadow:0 0 6px 2px var(--green-glow), 0 6px 14px rgba(0,0,0,0.25);
+    animation:hubPulse 1.6s ease-in-out infinite;}
+  .hub-core .core{position:absolute;inset:9px;border-radius:50%;
+    background:radial-gradient(circle at 35% 28%,#22343a,var(--hub-dark));
+    display:flex;align-items:center;justify-content:center;
+    box-shadow:inset 0 -4px 8px rgba(0,0,0,0.4), inset 0 3px 4px rgba(255,255,255,0.08);}
+  .hub-core svg{width:24px;height:24px;color:var(--green);animation:arrowShine 1.4s ease-in-out infinite;}
+  @keyframes arrowShine{
+    0%,100%{filter:drop-shadow(0 0 3px var(--green-glow));opacity:0.75;}
+    50%{filter:drop-shadow(0 0 10px var(--green-glow)) brightness(1.6);opacity:1;}
+  }
+  @keyframes hubPulse{
+    0%,100%{box-shadow:0 0 6px 2px var(--green-glow), 0 6px 14px rgba(0,0,0,0.25);}
+    50%{box-shadow:0 0 16px 6px var(--green-glow), 0 6px 14px rgba(0,0,0,0.25);}
+  }
+
+  .node{
+    position:absolute;width:96px;transform:translate(-50%,-50%);
+    display:flex;flex-direction:column;align-items:center;gap:6px;
+    cursor:pointer;z-index:4;
+  }
+  .node-card{
+    position:relative;width:100%;
+    background:linear-gradient(180deg,#ffffff 0%,#f1f4f6 100%);
+    border-radius:12px;border:1.5px solid var(--line);
+    padding:10px 6px 8px;display:flex;flex-direction:column;align-items:center;gap:5px;
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.9),
+      0 5px 0 var(--tube-shadow),
+      0 12px 18px -8px rgba(20,30,40,0.3);
+    transition:border-color 0.25s, box-shadow 0.25s, transform 0.15s;
+  }
+  .node-card::before,.node-card::after{
+    content:'';position:absolute;inset:0;border-radius:11px;
+    background:#eef1f3;border:1.5px solid var(--line);z-index:-1;
+  }
+  .node-card::before{transform:translate(3px,4px);opacity:0.75;}
+  .node-card::after{transform:translate(6px,8px);opacity:0.45;}
+  .node:active .node-card{transform:translateY(2px);box-shadow:inset 0 1px 0 rgba(255,255,255,0.9), 0 2px 0 var(--tube-shadow), 0 6px 10px -6px rgba(20,30,40,0.3);}
+  .node-card svg{width:20px;height:20px;color:var(--muted);transition:color 0.25s;}
+  .node-label{font-size:10px;font-weight:600;text-align:center;color:var(--muted);line-height:1.2;transition:color 0.25s;}
+  .node-badge{position:absolute;top:-7px;right:2px;font-family:'JetBrains Mono',monospace;font-size:7px;letter-spacing:0.5px;text-transform:uppercase;background:var(--card);border:1px solid var(--line);color:var(--muted);padding:1.5px 5px;border-radius:20px;z-index:1;}
+
+  .node.active .node-card{border-color:var(--green);box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.9),
+      0 5px 0 var(--green-dark),
+      0 12px 20px -6px var(--green-glow);}
+  .node.active .node-card svg{color:var(--green-dark);}
+  .node.active .node-label{color:var(--ink);}
+  .node.active .node-badge{border-color:var(--green);color:var(--green-dark);}
+
+  main{max-width:520px;margin:0 auto;padding:6px 20px 60px;}
+
+  .panel{border:1px solid var(--line);background:var(--card);border-radius:14px;padding:20px;margin-top:6px;
+    box-shadow:0 10px 24px -12px rgba(20,30,40,0.15);animation:panelIn 0.35s ease;}
+  @keyframes panelIn{from{opacity:0;transform:translateY(10px);}to{opacity:1;transform:translateY(0);}}
+  .panel-title{font-family:'Playfair Display',serif;font-size:19px;font-weight:600;margin-bottom:4px;display:flex;align-items:center;gap:8px;color:var(--ink);}
+  .panel-title .badge{font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:1px;text-transform:uppercase;color:#fff;background:var(--green);padding:2px 7px;border-radius:20px;}
+  .panel-title .badge.soon{background:transparent;border:1px solid var(--line);color:var(--muted);}
+  .panel-sub{font-size:12.5px;color:var(--muted);margin-bottom:16px;}
+
+  .chip-row{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px;}
+  .chip{
+    padding:9px 14px;border-radius:20px;border:1.5px solid var(--line);background:#fafbfc;
+    color:var(--muted);font-size:12.5px;font-weight:600;cursor:pointer;transition:0.15s;
+  }
+  .chip.active{border-color:var(--green);color:var(--green-dark);background:#eafcf2;}
+  .chip:active{transform:scale(0.96);}
+
+  .placeholder-body{border:1.5px dashed var(--line);border-radius:10px;padding:26px 16px;text-align:center;color:var(--muted);font-size:12.5px;}
+  .placeholder-body .icon{font-size:22px;margin-bottom:8px;opacity:0.4;}
+
+  label{display:block;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:var(--green-dark);margin-bottom:6px;}
+  select{
+    width:100%;background:#fafbfc;border:1.5px solid var(--line);color:var(--ink);
+    padding:12px;border-radius:8px;font-size:14px;font-family:'Inter',sans-serif;margin-bottom:16px;
+  }
+
+  .capture-row{display:flex;gap:10px;margin-bottom:16px;}
+  .btn{
+    flex:1;padding:14px 10px;border-radius:10px;border:1.5px solid var(--green);
+    background:#eafcf2;color:var(--green-dark);font-size:13px;font-weight:700;letter-spacing:0.3px;
+    display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;
+  }
+  .btn:active{background:#d7f7e4;}
+  .btn svg{width:20px;height:20px;}
+  input[type=file]{display:none;}
+
+  #preview-wrap{display:none;margin-bottom:16px;}
+  #preview{width:100%;border-radius:10px;border:1.5px solid var(--line);max-height:240px;object-fit:contain;background:#000;}
+
+  .solve-btn{
+    width:100%;padding:15px;border-radius:10px;border:none;
+    background:linear-gradient(135deg,var(--green),var(--green-dark));color:#fff;
+    font-weight:700;font-size:14px;letter-spacing:0.4px;cursor:pointer;
+    box-shadow:0 8px 16px -6px var(--green-glow);
+  }
+  .solve-btn:disabled{opacity:0.4;box-shadow:none;}
+
+  #status{font-family:'JetBrains Mono',monospace;font-size:11.5px;color:var(--muted);margin-top:12px;min-height:16px;}
+  #status.err{color:#d9483b;}
+
+  #extracted{display:none;margin-top:14px;padding:12px;background:#fafbfc;border-radius:8px;border:1.5px solid var(--line);}
+  #extracted .lbl{font-size:10px;letter-spacing:1.5px;color:var(--green-dark);text-transform:uppercase;margin-bottom:6px;}
+  #extracted-text{font-size:13.5px;line-height:1.5;color:var(--ink);white-space:pre-wrap;}
+
+  #answer-wrap{display:none;margin-top:16px;}
+  #answer-wrap .lbl{font-size:10px;letter-spacing:1.5px;color:var(--green-dark);text-transform:uppercase;margin-bottom:8px;}
+  #answer{font-size:14.5px;line-height:1.7;color:var(--ink);white-space:pre-wrap;}
+
+  .spinner{
+    width:14px;height:14px;border-radius:50%;border:2px solid var(--line);
+    border-top-color:var(--green);display:inline-block;animation:spin 0.7s linear infinite;
+    vertical-align:middle;margin-right:6px;
+  }
+  @keyframes spin{to{transform:rotate(360deg);}}
+
+  footer{text-align:center;padding:20px;font-size:10.5px;color:var(--muted);letter-spacing:0.5px;}
+</style>
+</head>
+<body>
+
+<header>
+  <canvas id="matrix-canvas"></canvas>
+  <div class="header-inner">
+    <div class="eyebrow">// scan &middot; understand &middot; master</div>
+    <h1 id="typed-title"><span id="typed-text"></span><span class="cursor">▊</span></h1>
+    <div class="sub">Drag the wheel or tap a card — whichever lands on top opens.</div>
+  </div>
+</header>
+
+<svg id="connector-pipe" viewBox="0 0 40 34">
+  <path class="tube-shadow" d="M20,0 L20,34" stroke-width="9"/>
+  <path class="tube-base" d="M20,0 L20,34" stroke-width="8"/>
+  <path class="tube-highlight" d="M20,0 L20,34" stroke-width="3"/>
+  <path class="tube-flow" d="M20,0 L20,34" stroke-width="4"/>
+  <circle class="blob" r="4" fill="#eafff2"><animateMotion dur="1.2s" begin="0s" repeatCount="indefinite" path="M20,0 L20,34"/></circle>
+  <circle class="blob" r="3" fill="#ffffff"><animateMotion dur="1.2s" begin="0.6s" repeatCount="indefinite" path="M20,0 L20,34"/></circle>
+</svg>
+
+<div id="wheel-wrap">
+  <svg id="tube-svg" viewBox="0 0 400 320"></svg>
+  <div class="hub-core">
+    <div class="ring"></div>
+    <div class="core">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4l7 8-7 8M12 4l7 8-7 8"/></svg>
+    </div>
+  </div>
+</div>
+
+<main>
+  <div id="panel-host"></div>
+</main>
+
+<footer>Phase 1 &middot; Scan &amp; Solve is live &mdash; other functions expand as they're built</footer>
+
+<script>
+const modules = [
+  { key:'scan', label:'Scan & Solve', badge:'live',
+    icon:`<path d="M4 8a2 2 0 012-2h1.5l1-1.5h7l1 1.5H18a2 2 0 012 2v9a2 2 0 01-2 2H6a2 2 0 01-2-2V8z"/><circle cx="12" cy="13" r="3.2"/>` },
+  { key:'dictionary', label:'Dictionary', badge:'next',
+    icon:`<path d="M4 19.5A2.5 2.5 0 016.5 17H20V4H6.5A2.5 2.5 0 004 6.5v13z"/><path d="M4 19.5V6.5"/>` },
+  { key:'grammar', label:'Grammar Ref.', badge:'next',
+    icon:`<path d="M4 6h16M4 12h10M4 18h16"/>` },
+  { key:'essay', label:'Essay & Letter', badge:'soon',
+    icon:`<path d="M12 20h9M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/>` },
+  { key:'sentence', label:'Sentence Builder', badge:'soon',
+    icon:`<path d="M3 12h18M3 6h12M3 18h8"/>` },
+];
+
+const N = modules.length;
+const step = 360 / N;
+let rotation = 0;
+let dragging = false;
+let dragStartX = 0;
+let rotationAtDragStart = 0;
+let activeIndex = 0;
+let wasDrag = false;
+
+const wrap = document.getElementById('wheel-wrap');
+const svg = document.getElementById('tube-svg');
+const host = document.getElementById('panel-host');
+
+let hubX = 200, hubY = 258, R = 108;
+
+function layoutGeometry(){
+  const w = wrap.clientWidth;
+  const h = wrap.clientHeight;
+  hubX = w / 2;
+  hubY = h * 0.82;
+  R = Math.min(w, h) * 0.5;
+  document.querySelector('.hub-core').style.left = hubX + 'px';
+  document.querySelector('.hub-core').style.top = hubY + 'px';
+}
+
+function buildDom(){
+  modules.forEach((m, i) => {
+    const node = document.createElement('div');
+    node.className = 'node';
+    node.dataset.index = i;
+    node.innerHTML = `
+      <div class="node-badge">${m.badge}</div>
+      <div class="node-card">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">${m.icon}</svg>
+        <div class="node-label">${m.label}</div>
+      </div>
+    `;
+    wrap.appendChild(node);
+    node.addEventListener('click', () => { if(!wasDrag) snapTo(i); });
+  });
+
+  modules.forEach((m, i) => {
+    svg.insertAdjacentHTML('beforeend', `
+      <path class="tube-shadow" data-tube="${i}" d=""/>
+      <path class="tube-base" data-tube="${i}" d=""/>
+      <path class="tube-highlight" data-tube="${i}" d=""/>
+      <path class="tube-flow" data-tube="${i}" d=""/>
+      <path class="tube-flow-core" data-tube="${i}" d=""/>
+      <circle class="blob" data-tube="${i}" r="5" fill="#eafff2">
+        <animateMotion data-motion="${i}" dur="1.6s" begin="${i * 0.25}s" repeatCount="indefinite" rotate="auto"/>
+      </circle>
+      <circle class="blob" data-tube="${i}" r="3.5" fill="#ffffff">
+        <animateMotion data-motion="${i}" dur="1.6s" begin="${i * 0.25 + 0.8}s" repeatCount="indefinite" rotate="auto"/>
+      </circle>
+    `);
+  });
+}
+
+function angleFor(i){
+  return (i * step) + rotation;
+}
+
+function positionNodes(){
+  const nodeEls = wrap.querySelectorAll('.node');
+  modules.forEach((m, i) => {
+    const a = (angleFor(i) - 90) * Math.PI / 180;
+    const x = hubX + R * Math.cos(a);
+    const y = hubY + R * Math.sin(a);
+    const el = nodeEls[i];
+    el.style.left = x + 'px';
+    el.style.top = y + 'px';
+
+    const tubeShadow = svg.querySelector(`.tube-shadow[data-tube="${i}"]`);
+    const tubeBase = svg.querySelector(`.tube-base[data-tube="${i}"]`);
+    const tubeHighlight = svg.querySelector(`.tube-highlight[data-tube="${i}"]`);
+    const tubeFlow = svg.querySelector(`.tube-flow[data-tube="${i}"]`);
+    const tubeFlowCore = svg.querySelector(`.tube-flow-core[data-tube="${i}"]`);
+    const midX = hubX + (x - hubX) * 0.5;
+    const d = `M${hubX},${hubY} Q${midX},${hubY} ${x},${y}`;
+    tubeShadow.setAttribute('d', d);
+    tubeBase.setAttribute('d', d);
+    tubeHighlight.setAttribute('d', d);
+    tubeFlow.setAttribute('d', d);
+    tubeFlowCore.setAttribute('d', d);
+
+    svg.querySelectorAll(`animateMotion[data-motion="${i}"]`).forEach(anim => {
+      anim.setAttribute('path', d);
+    });
+  });
+}
+
+function normalize(a){
+  a = a % 360;
+  if(a < 0) a += 360;
+  return a;
+}
+
+function updateActiveByAngle(){
+  let best = 0, bestDiff = 999;
+  modules.forEach((m, i) => {
+    const a = normalize(angleFor(i));
+    const diff = Math.min(a, 360 - a);
+    if(diff < bestDiff){ bestDiff = diff; best = i; }
+  });
+  return best;
+}
+
+function setActive(i, openPanel){
+  activeIndex = i;
+  wrap.querySelectorAll('.node').forEach((el, idx) => el.classList.toggle('active', idx === i));
+  if(openPanel) renderPanel(modules[i].key);
+}
+
+function snapTo(i){
+  const current = normalize(angleFor(i));
+  let delta = -current;
+  if(delta < -180) delta += 360;
+  if(delta > 180) delta -= 360;
+  animateRotationBy(delta, () => setActive(i, true));
+}
+
+function animateRotationBy(delta, cb){
+  const start = rotation;
+  const target = rotation + delta;
+  const duration = 320;
+  const t0 = performance.now();
+  function step_(t){
+    const p = Math.min(1, (t - t0) / duration);
+    const eased = 1 - Math.pow(1 - p, 3);
+    rotation = start + delta * eased;
+    positionNodes();
+    if(p < 1) requestAnimationFrame(step_);
+    else { rotation = target; positionNodes(); if(cb) cb(); }
+  }
+  requestAnimationFrame(step_);
+}
+
+wrap.addEventListener('pointerdown', e => {
+  dragging = true;
+  wasDrag = false;
+  dragStartX = e.clientX;
+  rotationAtDragStart = rotation;
+  wrap.setPointerCapture(e.pointerId);
+});
+wrap.addEventListener('pointermove', e => {
+  if(!dragging) return;
+  const dx = e.clientX - dragStartX;
+  if(Math.abs(dx) > 4) wasDrag = true;
+  rotation = rotationAtDragStart + dx * 0.6;
+  positionNodes();
+});
+wrap.addEventListener('pointerup', () => {
+  if(!dragging) return;
+  dragging = false;
+  const nearest = updateActiveByAngle();
+  const currentTotal = angleFor(nearest);
+  let delta = -normalize(currentTotal);
+  if(delta < -180) delta += 360;
+  if(delta > 180) delta -= 360;
+  animateRotationBy(delta, () => setActive(nearest, true));
+});
+wrap.addEventListener('pointercancel', () => { dragging = false; });
+
+window.addEventListener('resize', () => { layoutGeometry(); positionNodes(); });
+
+function scanSolveHTML(){
+  return `
+    <div class="panel">
+      <div class="panel-title">Scan a Question <span class="badge">live</span></div>
+      <div class="panel-sub">Photograph or upload the question — the AI reads it directly and answers.</div>
+
+      <label for="grade">Grade Level</label>
+      <select id="grade">
+        <option value="Class 1-3 (early primary)">Class 1–3 · Early Primary</option>
+        <option value="Class 4-5 (primary)">Class 4–5 · Primary</option>
+        <option value="Class 6-8 (middle school)" selected>Class 6–8 · Middle School</option>
+        <option value="Class 9-10 (matric / O-Level)">Class 9–10 · Matric / O-Level</option>
+        <option value="Class 11-12 (intermediate / A-Level)">Class 11–12 · Intermediate / A-Level</option>
+        <option value="Bachelors">Bachelor's Level</option>
+        <option value="Masters">Master's Level</option>
+      </select>
+
+      <div class="capture-row">
+        <label class="btn" for="camera-input">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 8a2 2 0 012-2h1.5l1-1.5h7l1 1.5H18a2 2 0 012 2v9a2 2 0 01-2 2H6a2 2 0 01-2-2V8z"/><circle cx="12" cy="13" r="3.2"/></svg>
+          Camera
+        </label>
+        <input type="file" id="camera-input" accept="image/*" capture="environment">
+
+        <label class="btn" for="upload-input">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M12 3v12M7 8l5-5 5 5"/></svg>
+          Upload
+        </label>
+        <input type="file" id="upload-input" accept="image/*">
+      </div>
+
+      <div id="preview-wrap"><img id="preview" alt="question preview"></div>
+      <div id="extracted"><div class="lbl">Extracted Question</div><div id="extracted-text"></div></div>
+
+      <button class="solve-btn" id="solve-btn" disabled>Solve This</button>
+      <div id="status"></div>
+
+      <div id="answer-wrap"><div class="lbl">Detailed Answer</div><div id="answer"></div></div>
+    </div>
+  `;
+}
+
+const subMenus = {
+  dictionary: { title:'Dictionary', badge:'next', desc:'Choose a lookup direction.', chips:['English → Urdu','Urdu → English','English → English'] },
+  grammar:    { title:'Grammar Reference', badge:'next', desc:'Choose a topic to study.', chips:['Tenses','Idioms','Word Pairs','Prepositions'] },
+  essay:      { title:'Essay & Letter Writer', badge:'soon', desc:'Choose what you want to write.', chips:['Essay','Letter','Application','Story','Poem'] },
+  sentence:   { title:'Sentence Builder', badge:'soon', desc:'Choose an exercise type.', chips:['Sentence Making','Narration → Paragraph','Singular / Plural'] },
+};
+
+function placeholderHTML(key){
+  const m = subMenus[key];
+  const chipButtons = m.chips.map((c,i) => `<div class="chip${i===0?' active':''}" data-chip="${c}">${c}</div>`).join('');
+  return `
+    <div class="panel">
+      <div class="panel-title">${m.title} <span class="badge soon">${m.badge}</span></div>
+      <div class="panel-sub">${m.desc}</div>
+      <div class="chip-row">${chipButtons}</div>
+      <div class="placeholder-body">
+        <div class="icon">＋</div>
+        Coming in the next build step
+      </div>
+    </div>
+  `;
+}
+
+function renderPanel(key){
+  if(key === 'scan'){
+    host.innerHTML = scanSolveHTML();
+    wireScanSolve();
+  } else {
+    host.innerHTML = placeholderHTML(key);
+    const chips = host.querySelectorAll('.chip');
+    chips.forEach(c => c.addEventListener('click', () => {
+      chips.forEach(x => x.classList.remove('active'));
+      c.classList.add('active');
+    }));
+  }
+}
+
+function wireScanSolve(){
+  const cameraInput = document.getElementById('camera-input');
+  const uploadInput = document.getElementById('upload-input');
+  const previewWrap = document.getElementById('preview-wrap');
+  const preview = document.getElementById('preview');
+  const solveBtn = document.getElementById('solve-btn');
+  const statusEl = document.getElementById('status');
+  const extractedWrap = document.getElementById('extracted');
+  const extractedText = document.getElementById('extracted-text');
+  const answerWrap = document.getElementById('answer-wrap');
+  const answerEl = document.getElementById('answer');
+  const gradeSelect = document.getElementById('grade');
+  if(!cameraInput) return;
+
+  let currentFile = null;
+
+  function handleFile(file){
+    if(!file) return;
+    currentFile = file;
+    preview.src = URL.createObjectURL(file);
+    previewWrap.style.display = 'block';
+    answerWrap.style.display = 'none';
+    extractedWrap.style.display = 'none';
+    statusEl.textContent = '';
+    statusEl.className = '';
+    solveBtn.disabled = false;
+  }
+
+  cameraInput.addEventListener('change', e => handleFile(e.target.files[0]));
+  uploadInput.addEventListener('change', e => handleFile(e.target.files[0]));
+
+  function fileToBase64(file){
+    return new Promise((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = () => resolve(r.result.split(',')[1]);
+      r.onerror = () => reject(new Error('Could not read image file'));
+      r.readAsDataURL(file);
+    });
+  }
+
+  solveBtn.addEventListener('click', async () => {
+    if(!currentFile) return;
+    solveBtn.disabled = true;
+    answerWrap.style.display = 'none';
+    extractedWrap.style.display = 'none';
+
+    try {
+      statusEl.className = '';
+      statusEl.innerHTML = '<span class="spinner"></span>Reading image and preparing answer...';
+
+      const base64Data = await fileToBase64(currentFile);
+      const mediaType = currentFile.type || 'image/jpeg';
+      const grade = gradeSelect.value;
+
+      const systemPrompt = `You are an expert English teacher. You are shown a photo of a question from a student's textbook or worksheet. The student is at: ${grade}.
+
+Read the question(s) directly from the image yourself (do not rely on any pre-extracted text). Then give a complete, accurate, well-structured answer appropriate to that level, covering grammar rules, definitions, and examples as a knowledgeable teacher would. If there are multiple questions, answer each one clearly labeled.
+
+Respond in EXACTLY this plain-text format, no markdown symbols like # or *:
+
+EXTRACTED QUESTION(S):
+<write out the question(s) as you read them from the image>
+
+ANSWER:
+<your detailed answer, using simple numbering and line breaks for structure>`;
+
+      const response = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "claude-sonnet-4-6",
+          max_tokens: 1500,
+          system: systemPrompt,
+          messages: [
+            {
+              role: "user",
+              content: [
+                { type: "image", source: { type: "base64", media_type: mediaType, data: base64Data } },
+                { type: "text", text: "Read and answer the question(s) in this image." }
+              ]
+            }
+          ]
+        })
+      });
+
+      if(!response.ok){
+        throw new Error('Answer service error (' + response.status + '). Please try again in a moment.');
+      }
+
+      const result = await response.json();
+      const fullText = (result.content || []).map(b => b.text || '').filter(Boolean).join('\n').trim();
+
+      if(!fullText){
+        throw new Error('No answer returned. Please try again.');
+      }
+
+      const marker = 'ANSWER:';
+      const markerIndex = fullText.indexOf(marker);
+      let extracted = fullText;
+      let answer = fullText;
+      if(markerIndex !== -1){
+        extracted = fullText.slice(0, markerIndex).replace('EXTRACTED QUESTION(S):','').trim();
+        answer = fullText.slice(markerIndex + marker.length).trim();
+      }
+
+      extractedText.textContent = extracted;
+      extractedWrap.style.display = 'block';
+      answerEl.textContent = answer;
+      answerWrap.style.display = 'block';
+      statusEl.textContent = 'Done.';
+
+    } catch(err){
+      statusEl.className = 'err';
+      statusEl.textContent = 'Error: ' + (err.message || 'something went wrong. Please try again.');
+      console.error(err);
+    } finally {
+      solveBtn.disabled = false;
+    }
+  });
+}
+
+// ============ Matrix rain background ============
+(function(){
+  const canvas = document.getElementById('matrix-canvas');
+  const ctx = canvas.getContext('2d');
+  let w, h, cols, drops;
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.,;:_-/\\';
+
+  function resize(){
+    w = canvas.width = canvas.clientWidth * devicePixelRatio;
+    h = canvas.height = canvas.clientHeight * devicePixelRatio;
+    const fontSize = 14 * devicePixelRatio;
+    cols = Math.floor(w / fontSize);
+    drops = new Array(cols).fill(0).map(()=> Math.random()*-30);
+    canvas._fontSize = fontSize;
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  function draw(){
+    ctx.fillStyle = 'rgba(238,241,243,0.18)';
+    ctx.fillRect(0,0,w,h);
+    const fontSize = canvas._fontSize;
+    ctx.font = fontSize + 'px monospace';
+    for(let i=0;i<cols;i++){
+      const char = chars[Math.floor(Math.random()*chars.length)];
+      ctx.fillStyle = 'rgba(20,154,79,0.55)';
+      ctx.fillText(char, i*fontSize, drops[i]*fontSize);
+      if(drops[i]*fontSize > h && Math.random() > 0.975){
+        drops[i] = 0;
+      }
+      drops[i]++;
+    }
+    requestAnimationFrame(draw);
+  }
+  draw();
+})();
+
+// ============ Decrypt-style typing title (loops continuously) ============
+(function(){
+  const target = "EnglishMaster";
+  const el = document.getElementById('typed-text');
+  const glyphs = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ!@#$%&*';
+
+  function typeIn(onDone){
+    let frame = 0;
+    const totalFrames = target.length * 4;
+    function tick(){
+      frame++;
+      let out = '';
+      const revealCount = Math.floor(frame / 4);
+      for(let i=0;i<target.length;i++){
+        if(i < revealCount) out += target[i];
+        else if(i === revealCount) out += glyphs[Math.floor(Math.random()*glyphs.length)];
+      }
+      el.textContent = out;
+      if(frame < totalFrames) setTimeout(tick, 45);
+      else { el.textContent = target; onDone(); }
+    }
+    tick();
+  }
+
+  function scrambleOut(onDone){
+    let frame = 0;
+    const totalFrames = 10;
+    function tick(){
+      frame++;
+      let out = '';
+      for(let i=0;i<target.length;i++){
+        out += frame > totalFrames * (i / target.length) ? '' : glyphs[Math.floor(Math.random()*glyphs.length)];
+      }
+      el.textContent = out;
+      if(frame < totalFrames) setTimeout(tick, 45);
+      else { el.textContent = ''; onDone(); }
+    }
+    tick();
+  }
+
+  function loop(){
+    typeIn(() => {
+      setTimeout(() => {
+        scrambleOut(() => setTimeout(loop, 300));
+      }, 3200);
+    });
+  }
+  loop();
+})();
+
+buildDom();
+layoutGeometry();
+positionNodes();
+setActive(0, true);
+</script>
+</body>
+</html>
