@@ -65,19 +65,13 @@ ANSWER:
   };
 
   let lastError = 'Unknown error';
+  const models = ['gemini-3.5-flash', 'gemini-3.1-flash-lite'];
 
-  async function tryKey(key, method){
-    const base = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent`;
-    if (method === 'header') {
-      return fetch(base, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
-        body: JSON.stringify(requestBody),
-      });
-    }
-    return fetch(`${base}?key=${key}`, {
+  async function tryKey(key, model){
+    const base = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+    return fetch(base, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
       body: JSON.stringify(requestBody),
     });
   }
@@ -85,23 +79,28 @@ ANSWER:
   for (let i = 0; i < keys.length; i++) {
     const key = keys[i];
 
-    for (const method of ['header', 'query']) {
+    for (const model of models) {
       try {
-        const res = await tryKey(key, method);
+        const res = await tryKey(key, model);
 
         if (res.status === 429) {
-          lastError = `Key ${i + 1} rate-limited (HTTP 429). Trying next key...`;
-          break; // quota is quota, no point trying the other method
+          lastError = `Key ${i + 1} rate-limited on ${model} (HTTP 429). Trying next key...`;
+          break; // quota is quota, move to next key
         }
 
         if (res.status === 401 || res.status === 403) {
-          lastError = `Key ${i + 1} rejected via ${method} (HTTP ${res.status}).`;
-          continue; // try the other method before giving up on this key
+          lastError = `Key ${i + 1} rejected on ${model} (HTTP ${res.status}).`;
+          continue; // try next model with same key
+        }
+
+        if (res.status === 503) {
+          lastError = `Key ${i + 1}: ${model} overloaded (HTTP 503). Trying next model...`;
+          continue;
         }
 
         if (!res.ok) {
           const errText = await res.text().catch(() => '');
-          lastError = `Key ${i + 1} error (HTTP ${res.status}): ${errText.slice(0, 200)}`;
+          lastError = `Key ${i + 1} error on ${model} (HTTP ${res.status}): ${errText.slice(0, 200)}`;
           continue;
         }
 
@@ -113,17 +112,17 @@ ANSWER:
           .trim();
 
         if (!text) {
-          lastError = `Key ${i + 1} returned an empty response.`;
+          lastError = `Key ${i + 1} returned an empty response from ${model}.`;
           continue;
         }
 
         return {
           statusCode: 200,
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text, keyUsed: i + 1, authMethod: method }),
+          body: JSON.stringify({ text, keyUsed: i + 1, model }),
         };
       } catch (err) {
-        lastError = `Key ${i + 1} failed: ${err.message}`;
+        lastError = `Key ${i + 1} failed on ${model}: ${err.message}`;
       }
     }
   }
