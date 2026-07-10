@@ -5,3 +5,8 @@
   from = "/api/solve"
   to = "/.netlify/functions/solve"
   status = 200
+
+[[redirects]]
+  from = "/api/urdu-dict"
+  to = "/.netlify/functions/urdu-dict"
+  status = 200

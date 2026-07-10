@@ -542,15 +542,13 @@ function wireDictionary(){
         results.innerHTML = html;
         statusEl.textContent = 'Done.';
       } else {
-        await loadUrduDict();
-        const ql = q.toLowerCase();
-        let matches = [];
-        if(mode === 'uren'){
-          matches = urduDict.filter(e => e[''] === q).slice(0,5);
-          if(matches.length === 0) matches = urduDict.filter(e => e[''] && e[''].includes(q)).slice(0,5);
-        } else {
-          matches = urduDict.filter(e => (e.d||[]).some(def => def.toLowerCase().includes(ql))).slice(0,6);
+        const res = await fetch(`/api/urdu-dict?q=${encodeURIComponent(q)}&mode=${mode}`);
+        if(!res.ok){
+          const errBody = await res.json().catch(() => ({}));
+          throw new Error(errBody.error || ('Lookup failed (HTTP ' + res.status + ')'));
         }
+        const data = await res.json();
+        const matches = data.matches || [];
         if(matches.length === 0){
           results.innerHTML = `<div class="placeholder-body">No matches found for "${q}".</div>`;
         } else {

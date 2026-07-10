@@ -67,7 +67,7 @@ ANSWER:
   let lastError = 'Unknown error';
 
   async function tryKey(key, method){
-    const base = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent`;
+    const base = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent`;
     if (method === 'header') {
       return fetch(base, {
         method: 'POST',
@@ -91,12 +91,12 @@ ANSWER:
 
         if (res.status === 429) {
           lastError = `Key ${i + 1} rate-limited (HTTP 429). Trying next key...`;
-          break;
+          break; // quota is quota, no point trying the other method
         }
 
         if (res.status === 401 || res.status === 403) {
           lastError = `Key ${i + 1} rejected via ${method} (HTTP ${res.status}).`;
-          continue;
+          continue; // try the other method before giving up on this key
         }
 
         if (!res.ok) {
