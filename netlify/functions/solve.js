@@ -66,22 +66,28 @@ ANSWER:
 
   let lastError = 'Unknown error';
 
-  async function tryKey(key, useHeader){
-    const url = useHeader
-      ? `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent`
-      : `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`;
-    const headers = { 'Content-Type': 'application/json' };
-    if(useHeader) headers['Authorization'] = `Bearer ${key}`;
-
-    return fetch(url, { method: 'POST', headers, body: JSON.stringify(requestBody) });
+  async function tryKey(key, method){
+    const base = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent`;
+    if (method === 'header') {
+      return fetch(base, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
+        body: JSON.stringify(requestBody),
+      });
+    }
+    return fetch(`${base}?key=${key}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(requestBody),
+    });
   }
 
   for (let i = 0; i < keys.length; i++) {
     const key = keys[i];
 
-    for (const useHeader of [false, true]) {
+    for (const method of ['header', 'query']) {
       try {
-        const res = await tryKey(key, useHeader);
+        const res = await tryKey(key, method);
 
         if (res.status === 429) {
           lastError = `Key ${i + 1} rate-limited (HTTP 429). Trying next key...`;
@@ -89,12 +95,13 @@ ANSWER:
         }
 
         if (res.status === 401 || res.status === 403) {
-          lastError = `Key ${i + 1} rejected with ${useHeader ? 'Bearer header' : 'query param'} (HTTP ${res.status}).`;
+          lastError = `Key ${i + 1} rejected via ${method} (HTTP ${res.status}).`;
           continue;
         }
 
         if (!res.ok) {
-          lastError = `Key ${i + 1} error (HTTP ${res.status}).`;
+          const errText = await res.text().catch(() => '');
+          lastError = `Key ${i + 1} error (HTTP ${res.status}): ${errText.slice(0, 200)}`;
           continue;
         }
 
@@ -113,7 +120,7 @@ ANSWER:
         return {
           statusCode: 200,
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text, keyUsed: i + 1, authMethod: useHeader ? 'bearer' : 'query' }),
+          body: JSON.stringify({ text, keyUsed: i + 1, authMethod: method }),
         };
       } catch (err) {
         lastError = `Key ${i + 1} failed: ${err.message}`;
