@@ -10,3 +10,8 @@
   from = "/api/urdu-dict"
   to = "/.netlify/functions/urdu-dict"
   status = 200
+
+[[redirects]]
+  from = "/api/write"
+  to = "/.netlify/functions/write"
+  status = 200

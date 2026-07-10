@@ -220,9 +220,9 @@ const modules = [
     icon:`<path d="M4 19.5A2.5 2.5 0 016.5 17H20V4H6.5A2.5 2.5 0 004 6.5v13z"/><path d="M4 19.5V6.5"/>` },
   { key:'grammar', label:'Grammar Ref.', badge:'live',
     icon:`<path d="M4 6h16M4 12h10M4 18h16"/>` },
-  { key:'essay', label:'Essay & Letter', badge:'soon',
+  { key:'essay', label:'Essay & Letter', badge:'live',
     icon:`<path d="M12 20h9M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/>` },
-  { key:'sentence', label:'Sentence Builder', badge:'soon',
+  { key:'sentence', label:'Sentence Builder', badge:'live',
     icon:`<path d="M3 12h18M3 6h12M3 18h8"/>` },
 ];
 
@@ -433,25 +433,170 @@ function scanSolveHTML(){
   `;
 }
 
-const subMenus = {
-  essay:    { title:'Essay & Letter Writer', badge:'soon', desc:'Choose what you want to write.', chips:['Essay','Letter','Application','Story','Poem'] },
-  sentence: { title:'Sentence Builder', badge:'soon', desc:'Choose an exercise type.', chips:['Sentence Making','Narration → Paragraph','Singular / Plural'] },
-};
+// ============ Essay & Letter Writer (Gemini-backed) ============
+const essayTasks = [
+  { label:'Essay', task:'essay', placeholder:'Topic, e.g. "My favorite hobby"' },
+  { label:'Letter', task:'letter', placeholder:'What the letter is about, e.g. "letter to a friend about exam results"' },
+  { label:'Application', task:'application', placeholder:'What it\'s for, e.g. "leave application for fever"' },
+  { label:'Story', task:'story', placeholder:'Story idea, e.g. "a boy who found a magic pen"' },
+  { label:'Poem', task:'poem', placeholder:'Poem topic, e.g. "the rain"' },
+];
 
-function placeholderHTML(key){
-  const m = subMenus[key];
-  const chipButtons = m.chips.map((c,i) => `<div class="chip${i===0?' active':''}" data-chip="${c}">${c}</div>`).join('');
+function essayHTML(){
+  const chips = essayTasks.map((t,i) => `<div class="chip${i===0?' active':''}" data-task="${t.task}">${t.label}</div>`).join('');
   return `
     <div class="panel">
-      <div class="panel-title">${m.title} <span class="badge soon">${m.badge}</span></div>
-      <div class="panel-sub">${m.desc}</div>
-      <div class="chip-row">${chipButtons}</div>
-      <div class="placeholder-body">
-        <div class="icon">＋</div>
-        Coming in the next build step
-      </div>
+      <div class="panel-title">Essay &amp; Letter Writer <span class="badge">live</span></div>
+      <div class="panel-sub">Choose a type, describe what you need, and get a complete draft.</div>
+      <div class="chip-row">${chips}</div>
+
+      <label for="essay-grade">Grade Level</label>
+      <select id="essay-grade">
+        <option value="Class 1-3 (early primary)">Class 1–3 · Early Primary</option>
+        <option value="Class 4-5 (primary)">Class 4–5 · Primary</option>
+        <option value="Class 6-8 (middle school)" selected>Class 6–8 · Middle School</option>
+        <option value="Class 9-10 (matric / O-Level)">Class 9–10 · Matric / O-Level</option>
+        <option value="Class 11-12 (intermediate / A-Level)">Class 11–12 · Intermediate / A-Level</option>
+        <option value="Bachelors">Bachelor's Level</option>
+        <option value="Masters">Master's Level</option>
+      </select>
+
+      <textarea id="essay-input" rows="3" placeholder="${essayTasks[0].placeholder}" style="width:100%;padding:12px;border-radius:8px;border:1.5px solid var(--line);font-size:14px;font-family:'Inter',sans-serif;margin-bottom:14px;resize:vertical;"></textarea>
+
+      <button class="solve-btn" id="essay-generate-btn">Generate</button>
+      <div id="essay-status" style="font-family:'JetBrains Mono',monospace;font-size:11.5px;color:var(--muted);margin-top:10px;"></div>
+      <div id="essay-output" style="margin-top:14px;font-size:14.5px;line-height:1.7;color:var(--ink);white-space:pre-wrap;"></div>
     </div>
   `;
+}
+
+function wireEssay(){
+  const chips = host.querySelectorAll('.chip[data-task]');
+  const input = document.getElementById('essay-input');
+  const gradeSel = document.getElementById('essay-grade');
+  const btn = document.getElementById('essay-generate-btn');
+  const statusEl = document.getElementById('essay-status');
+  const output = document.getElementById('essay-output');
+  let currentTask = essayTasks[0].task;
+
+  chips.forEach(c => c.addEventListener('click', () => {
+    chips.forEach(x => x.classList.remove('active'));
+    c.classList.add('active');
+    currentTask = c.dataset.task;
+    const t = essayTasks.find(x => x.task === currentTask);
+    input.placeholder = t.placeholder;
+  }));
+
+  btn.addEventListener('click', async () => {
+    const val = input.value.trim();
+    if(!val) return;
+    btn.disabled = true;
+    output.textContent = '';
+    statusEl.innerHTML = '<span class="spinner"></span>Writing...';
+
+    try {
+      const res = await fetch('/api/write', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ task: currentTask, input: val, grade: gradeSel.value }),
+      });
+      if(!res.ok){
+        const errBody = await res.json().catch(() => ({}));
+        throw new Error(errBody.error || ('Service error (HTTP ' + res.status + ')'));
+      }
+      const data = await res.json();
+      output.textContent = data.text || '';
+      statusEl.textContent = 'Done.';
+    } catch(err){
+      statusEl.className = 'err';
+      statusEl.textContent = 'Error: ' + err.message;
+      console.error(err);
+    } finally {
+      btn.disabled = false;
+    }
+  });
+}
+
+// ============ Sentence Builder (Gemini-backed) ============
+const sentenceTasks = [
+  { label:'Sentence Making', task:'sentence', placeholder:'Word(s), e.g. "beautiful, garden"' },
+  { label:'Narration', task:'narration', placeholder:'A sentence to convert, e.g. He said, "I am tired."' },
+  { label:'Singular / Plural', task:'plural', placeholder:'A word, e.g. "child" or "boxes"' },
+];
+
+function sentenceHTML(){
+  const chips = sentenceTasks.map((t,i) => `<div class="chip${i===0?' active':''}" data-task="${t.task}">${t.label}</div>`).join('');
+  return `
+    <div class="panel">
+      <div class="panel-title">Sentence Builder <span class="badge">live</span></div>
+      <div class="panel-sub">Choose an exercise type and enter your input.</div>
+      <div class="chip-row">${chips}</div>
+
+      <label for="sent-grade">Grade Level</label>
+      <select id="sent-grade">
+        <option value="Class 1-3 (early primary)">Class 1–3 · Early Primary</option>
+        <option value="Class 4-5 (primary)">Class 4–5 · Primary</option>
+        <option value="Class 6-8 (middle school)" selected>Class 6–8 · Middle School</option>
+        <option value="Class 9-10 (matric / O-Level)">Class 9–10 · Matric / O-Level</option>
+        <option value="Class 11-12 (intermediate / A-Level)">Class 11–12 · Intermediate / A-Level</option>
+        <option value="Bachelors">Bachelor's Level</option>
+        <option value="Masters">Master's Level</option>
+      </select>
+
+      <textarea id="sent-input" rows="2" placeholder="${sentenceTasks[0].placeholder}" style="width:100%;padding:12px;border-radius:8px;border:1.5px solid var(--line);font-size:14px;font-family:'Inter',sans-serif;margin-bottom:14px;resize:vertical;"></textarea>
+
+      <button class="solve-btn" id="sent-generate-btn">Generate</button>
+      <div id="sent-status" style="font-family:'JetBrains Mono',monospace;font-size:11.5px;color:var(--muted);margin-top:10px;"></div>
+      <div id="sent-output" style="margin-top:14px;font-size:14.5px;line-height:1.7;color:var(--ink);white-space:pre-wrap;"></div>
+    </div>
+  `;
+}
+
+function wireSentence(){
+  const chips = host.querySelectorAll('.chip[data-task]');
+  const input = document.getElementById('sent-input');
+  const gradeSel = document.getElementById('sent-grade');
+  const btn = document.getElementById('sent-generate-btn');
+  const statusEl = document.getElementById('sent-status');
+  const output = document.getElementById('sent-output');
+  let currentTask = sentenceTasks[0].task;
+
+  chips.forEach(c => c.addEventListener('click', () => {
+    chips.forEach(x => x.classList.remove('active'));
+    c.classList.add('active');
+    currentTask = c.dataset.task;
+    const t = sentenceTasks.find(x => x.task === currentTask);
+    input.placeholder = t.placeholder;
+  }));
+
+  btn.addEventListener('click', async () => {
+    const val = input.value.trim();
+    if(!val) return;
+    btn.disabled = true;
+    output.textContent = '';
+    statusEl.innerHTML = '<span class="spinner"></span>Working...';
+
+    try {
+      const res = await fetch('/api/write', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ task: currentTask, input: val, grade: gradeSel.value }),
+      });
+      if(!res.ok){
+        const errBody = await res.json().catch(() => ({}));
+        throw new Error(errBody.error || ('Service error (HTTP ' + res.status + ')'));
+      }
+      const data = await res.json();
+      output.textContent = data.text || '';
+      statusEl.textContent = 'Done.';
+    } catch(err){
+      statusEl.className = 'err';
+      statusEl.textContent = 'Error: ' + err.message;
+      console.error(err);
+    } finally {
+      btn.disabled = false;
+    }
+  });
 }
 
 // ============ Dictionary (real, free, no AI) ============
@@ -763,13 +908,12 @@ function renderPanel(key){
   } else if(key === 'grammar'){
     host.innerHTML = grammarHTML();
     wireGrammar();
-  } else {
-    host.innerHTML = placeholderHTML(key);
-    const chips = host.querySelectorAll('.chip');
-    chips.forEach(c => c.addEventListener('click', () => {
-      chips.forEach(x => x.classList.remove('active'));
-      c.classList.add('active');
-    }));
+  } else if(key === 'essay'){
+    host.innerHTML = essayHTML();
+    wireEssay();
+  } else if(key === 'sentence'){
+    host.innerHTML = sentenceHTML();
+    wireSentence();
   }
 }
 
