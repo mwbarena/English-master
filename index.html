@@ -46,6 +46,23 @@
   .sub{margin-top:8px;font-size:12.5px;color:var(--muted);max-width:420px;margin-left:auto;margin-right:auto;line-height:1.5;}
 
 
+  #ticker-wrap{
+    width:100%;overflow:hidden;background:#06090a;border-top:1px solid var(--line);border-bottom:1px solid var(--line);
+    padding:9px 0;position:relative;margin-top:4px;
+  }
+  #ticker-track{
+    display:inline-flex;white-space:nowrap;animation:tickerScroll 18s linear infinite;
+  }
+  .ticker-item{
+    font-family:'JetBrains Mono',monospace;font-weight:700;font-size:13px;letter-spacing:1px;
+    color:var(--green);text-transform:uppercase;padding-right:60px;
+    text-shadow:0 0 6px rgba(38,209,111,0.9), 0 0 14px rgba(38,209,111,0.6), 0 0 26px rgba(38,209,111,0.4);
+  }
+  @keyframes tickerScroll{
+    0%{transform:translateX(0);}
+    100%{transform:translateX(-50%);}
+  }
+
   #wheel-wrap{position:relative;width:100%;max-width:460px;margin:6px auto 0;height:320px;overflow:hidden;touch-action:pan-y;}
   #tube-svg{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;}
   .tube-base{fill:none;stroke:#b7bdc3;stroke-width:10;stroke-linecap:round;}
@@ -195,6 +212,13 @@
     <div class="sub">Drag the wheel or tap a card — whichever lands on top opens.</div>
   </div>
 </header>
+
+<div id="ticker-wrap">
+  <div id="ticker-track">
+    <span class="ticker-item">This App is made by Asfa Ali &middot; Contact for more Custom Apps: https://www.facebook.com/share/1E9b7orVVn/</span>
+    <span class="ticker-item">This App is made by Asfa Ali &middot; Contact for more Custom Apps: https://www.facebook.com/share/1E9b7orVVn/</span>
+  </div>
+</div>
 
 <div id="wheel-wrap">
   <svg id="tube-svg" viewBox="0 0 400 320"></svg>
@@ -1250,11 +1274,14 @@ function wireScanSolve(){
       if(markerIndex !== -1){
         extracted = fullText.slice(0, markerIndex).replace('EXTRACTED QUESTION(S):','').trim();
         answer = fullText.slice(markerIndex + marker.length).trim();
+        extractedText.textContent = extracted;
+        extractedWrap.style.display = 'block';
+        answerEl.textContent = answer;
+      } else {
+        // new compact Q:/A: format — just show it all together
+        extractedWrap.style.display = 'none';
+        answerEl.textContent = fullText;
       }
-
-      extractedText.textContent = extracted;
-      extractedWrap.style.display = 'block';
-      answerEl.textContent = answer;
       answerWrap.style.display = 'block';
       statusEl.textContent = 'Done.';
 
