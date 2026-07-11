@@ -237,7 +237,22 @@
 <footer></footer>
 
 <script>
+// Global voice assistant cleanup — called on every tab switch so voice never
+// keeps running (listening or talking) after the user leaves the Voice panel.
+let activeRecognition = null;
+function stopVoiceAssistant(){
+  if(activeRecognition){
+    try { activeRecognition.onend = null; activeRecognition.onresult = null; activeRecognition.stop(); } catch(e){}
+    activeRecognition = null;
+  }
+  if(window.speechSynthesis){
+    window.speechSynthesis.cancel();
+  }
+}
+
 const modules = [
+  { key:'ask', label:'Ask Anything', badge:'live',
+    icon:`<path d="M12 18h.01M9.09 9a3 3 0 015.83 1c0 2-3 2-3 4"/><circle cx="12" cy="12" r="9"/>` },
   { key:'scan', label:'Scan & Solve', badge:'live',
     icon:`<path d="M4 8a2 2 0 012-2h1.5l1-1.5h7l1 1.5H18a2 2 0 012 2v9a2 2 0 01-2 2H6a2 2 0 01-2-2V8z"/><circle cx="12" cy="13" r="3.2"/>` },
   { key:'dictionary', label:'Dictionary', badge:'live',
@@ -248,8 +263,6 @@ const modules = [
     icon:`<path d="M12 20h9M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/>` },
   { key:'sentence', label:'Sentence Builder', badge:'live',
     icon:`<path d="M3 12h18M3 6h12M3 18h8"/>` },
-  { key:'ask', label:'Ask Anything', badge:'live',
-    icon:`<path d="M12 18h.01M9.09 9a3 3 0 015.83 1c0 2-3 2-3 4"/><circle cx="12" cy="12" r="9"/>` },
   { key:'voice', label:'Voice Assistant', badge:'live',
     icon:`<path d="M12 15a3 3 0 003-3V6a3 3 0 00-6 0v6a3 3 0 003 3z"/><path d="M19 11a7 7 0 01-14 0M12 18v3"/>` },
 ];
@@ -1066,8 +1079,11 @@ function wireVoice(){
   function pickFemaleVoice(){
     const voices = window.speechSynthesis ? window.speechSynthesis.getVoices() : [];
     const en = voices.filter(v => v.lang && v.lang.startsWith('en'));
+    // prefer accented English voices where the device has them (closest lever
+    // a browser gives us — there's no true "ethnicity" voice option)
+    const accented = en.find(v => /en-in|en-ph|en-sg|en-hk/i.test(v.lang));
     const female = en.find(v => /female|zira|samantha|victoria|susan|google us english/i.test(v.name));
-    return female || en[0] || voices[0] || null;
+    return accented || female || en[0] || voices[0] || null;
   }
 
   function speak(text){
@@ -1076,8 +1092,8 @@ function wireVoice(){
     const utter = new SpeechSynthesisUtterance(text);
     const v = pickFemaleVoice();
     if(v) utter.voice = v;
-    utter.pitch = 1.15;
-    utter.rate = 1.0;
+    utter.pitch = 1.55;  // higher pitch = more youthful-sounding
+    utter.rate = 1.08;   // slightly faster = more teen-like energy
     window.speechSynthesis.speak(utter);
   }
 
@@ -1119,12 +1135,12 @@ function wireVoice(){
     }
   }
 
-  let recognition = null;
   let listening = false;
 
   function startListening(){
     if(listening) return;
-    recognition = new SpeechRecognition();
+    activeRecognition = new SpeechRecognition();
+    const recognition = activeRecognition;
     recognition.lang = 'en-US';
     recognition.interimResults = false;
     recognition.maxAlternatives = 1;
@@ -1144,11 +1160,12 @@ function wireVoice(){
   }
 
   orb.addEventListener('click', () => {
-    if(listening){ recognition && recognition.stop(); return; }
+    if(listening){ activeRecognition && activeRecognition.stop(); return; }
     startListening();
   });
 }
 function renderPanel(key){
+  stopVoiceAssistant();
   if(key === 'scan'){
     host.innerHTML = scanSolveHTML();
     wireScanSolve();
